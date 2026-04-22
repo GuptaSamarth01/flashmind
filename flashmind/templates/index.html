@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FlashMind</title>
+    <style>
+        body {
+            font-family: Arial;
+            text-align: center;
+            background: #f5f5f5;
+        }
+
+        h1 {
+            margin-top: 20px;
+        }
+
+        input {
+            padding: 8px;
+            margin: 10px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+
+        .card {
+            width: 450px;
+            margin: 30px auto;
+            padding: 25px;
+            background: white;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 18px;
+            transition: 0.3s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .card:hover {
+            transform: scale(1.03);
+        }
+
+        button {
+            padding: 10px 15px;
+            margin: 10px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .knew {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .forgot {
+            background: #f44336;
+            color: white;
+        }
+
+        #progress {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        .progress-container {
+            width: 300px;
+            margin: 10px auto;
+            background: #ddd;
+            border-radius: 10px;
+        }
+
+        .progress-bar {
+            height: 10px;
+            width: 0%;
+            background: green;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>📚 FlashMind</h1>
+
+<input type="text" id="deckName" placeholder="Enter Deck Name">
+<br>
+
+<input type="file" id="pdfFile">
+<button onclick="uploadPDF()">Generate Flashcards</button>
+
+<div id="card" class="card" onclick="flipCard()">Click to start</div>
+
+<div>
+    <button class="knew" onclick="markKnown()">✅ Knew</button>
+    <button class="forgot" onclick="markForgot()">❌ Forgot</button>
+</div>
+
+<p id="progress"></p>
+
+<div class="progress-container">
+    <div id="bar" class="progress-bar"></div>
+</div>
+
+<script>
+let flashcards = [];
+let current = 0;
+let showAnswer = false;
+
+// 🔄 Load saved data
+window.onload = function() {
+    let saved = localStorage.getItem("flashcards");
+
+    if (saved) {
+        flashcards = JSON.parse(saved);
+        showCard();
+    }
+};
+
+// 🚀 Upload PDF
+function uploadPDF() {
+    let file = document.getElementById("pdfFile").files[0];
+
+    if (!file) {
+        alert("Please upload a PDF");
+        return;
+    }
+
+    let deckName = document.getElementById("deckName").value || "My Deck";
+    console.log("Deck:", deckName);
+
+    let formData = new FormData();
+    formData.append("file", file);
+
+    fetch("/upload", {
+        method: "POST",
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (!data.flashcards) {
+            alert("Error generating flashcards");
+            return;
+        }
+
+        flashcards = data.flashcards.map(card => ({
+            ...card,
+            score: 0,
+            nextReview: 0
+        }));
+
+        saveData();
+
+        current = 0;
+        showAnswer = false;
+
+        showCard();
+    })
+    .catch(err => {
+        console.error("ERROR:", err);
+    });
+}
+
+// 🧠 Show Card
+function showCard() {
+    if (flashcards.length === 0) return;
+
+    let card = flashcards[current];
+
+    document.getElementById("card").innerText =
+        showAnswer ? card.answer : card.question;
+
+    let mastered = flashcards.filter(c => c.score > 1).length;
+
+    document.getElementById("progress").innerText =
+        `Mastered: ${mastered} / ${flashcards.length}`;
+
+    let percent = (mastered / flashcards.length) * 100;
+    document.getElementById("bar").style.width = percent + "%";
+}
+
+// 🔁 Flip
+function flipCard() {
+    showAnswer = !showAnswer;
+    showCard();
+}
+
+// ✅ Knew
+function markKnown() {
+    let card = flashcards[current];
+
+    card.score++;
+    card.nextReview = Date.now() + (card.score * 5000);
+
+    saveData();
+    nextCard();
+}
+
+// ❌ Forgot
+function markForgot() {
+    let card = flashcards[current];
+
+    card.score--;
+    card.nextReview = Date.now() + 1000;
+
+    saveData();
+    nextCard();
+}
+
+// 🧠 Smart Selection
+function nextCard() {
+    showAnswer = false;
+
+    let now = Date.now();
+
+    let available = flashcards.filter(c => c.nextReview <= now);
+
+    if (available.length === 0) {
+        flashcards.forEach(c => c.nextReview = 0);
+        available = flashcards;
+    }
+
+    available.sort((a, b) => a.score - b.score);
+
+    current = flashcards.indexOf(available[0]);
+
+    showCard();
+}
+
+// 💾 Save Data
+function saveData() {
+    localStorage.setItem("flashcards", JSON.stringify(flashcards));
+}
+</script>
+
+</body>
+</html>
